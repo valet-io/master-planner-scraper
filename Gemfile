@@ -1,4 +1,4 @@
 source 'http://rubygems.org'
 
-gem 'mechanize'
+gem 'nokogiri'
 gem 'iron_worker_ng'
