@@ -1,0 +1,27 @@
+GEM
+  remote: http://rubygems.org/
+  specs:
+    iron_core (0.6.2)
+      rest (>= 2.2.0)
+    iron_worker_ng (0.16.4)
+      bundler (>= 1.2.0)
+      iron_core (>= 0.5.1)
+      rubyzip (>= 0.9.9)
+    mime-types (1.23)
+    mini_portile (0.5.1)
+    net-http-persistent (2.8)
+    nokogiri (1.6.0)
+      mini_portile (~> 0.5.0)
+    rest (2.6.3)
+      net-http-persistent
+      rest-client (>= 0.3.0)
+    rest-client (1.6.7)
+      mime-types (>= 1.16)
+    rubyzip (0.9.9)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  iron_worker_ng
+  nokogiri
