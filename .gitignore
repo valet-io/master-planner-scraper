@@ -19,3 +19,4 @@ doc/
 
 *.cache
 credentials.json
+iron.json
