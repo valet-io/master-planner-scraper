@@ -253,12 +253,17 @@ class MasterPlanner
 			event[:city] = city
 			event[:venue] = venue
 		end
-		if unmatched.any?
-			puts "Matched:"
-			puts event.inspect
-			puts "Unmatched:"
-			puts unmatched.inspect
+
+		tags = unmatched.grep(/^Tags: /).first
+		if tags
+			unmatched.delete tags
+			tags.gsub!(/^Tags: /,'')
+			tags = tags.split(" ")
+			event[:cause_tags] = select_cause_tags tags
+			event[:auction] = true if tags.include? "Auction"
 		end
+
+		event[:comments] = unmatched
 		
 		return event
 	end
@@ -291,6 +296,15 @@ class MasterPlanner
 		return matches, unmatched
 	end
 
+	def select_cause_tags(tag_array)
+
+		cause_tags = ["Africa", "Animal Rights/Welfare", "Anti Defamation", "Arts Film", "Arts Libraries", "Arts Performing Arts", "Arts Visual Arts", "Association", "Child Advocacy", "Civic", "Civil/Human Rights", "Cultural", "Economic Development", "Education Adult", "Education K-12", "Education University", "Environmental", "Faith Catholic", "Faith Christian", "Faith Hindu", "Faith Jewish", "Faith Muslim", "Faith Protestant", "Family/Social Services", "Gay Rights", "Health Addictions", "Health Aging", "Health AIDS", "Health Alzheimer’s", "Health Arthritis", "Health Autism", "Health Autoimmune Disease", "Health Blind", "Health Cancer", "Health Clinic", "Health Clinics/Health Care", "Health Diabetes", "Health Digestive Diseases", "Health Heart Disease", "Health Hospitals", "Health Mental Health", "Health Misc.", "Health MS", "Health Neurological", "Health Orthopedic", "Health Parkinson’s ", "Health Pediatrics", "Health Research", "Medical Research", "Museum", "Political  Action", "Politics Democratic", "Politics Independent", "Politics Republican", "Public Television", "Social Services Counseling", "Social Services Food Banks", "Social Services Homeless"]
+
+		tag_array.select {|tag|
+			cause_tags.include? tag
+		}
+	end
+
 end
 
 mp = MasterPlanner.new({
@@ -300,4 +314,4 @@ mp = MasterPlanner.new({
 
 # mp.login
 sample_node = Nokogiri::HTML IO.read('sample-node.html')
-mp.process_events_list
+puts mp.process_events_list
