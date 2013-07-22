@@ -3,6 +3,7 @@ require 'uri'
 require 'date'
 require 'nokogiri'
 require 'json'
+require 'iron_mq'
 
 class MasterPlanner
 
@@ -34,6 +35,7 @@ class MasterPlanner
 				'__EVENTARGUMENT' => '',
 				'ctl00$ddSearchType' => -1,
 				'ctl00$ddDateRange' => 'Custom',
+				'ctl00$txtSearch' => 'Gala Fundraiser Benefit',
 				'ctl00$txtDateFrom' => Date.today.strftime(@@date_format),
 				'ctl00$txtDateTo' => (Date.today >> 12).strftime(@@date_format)
 			}
@@ -305,6 +307,12 @@ class MasterPlanner
 		}
 	end
 
+	def push_event(event)
+		ironmq = IronMQ::Client.new
+		queue = ironmq.queue("scraped-events")
+		queue.post event.to_json
+	end
+
 end
 
 mp = MasterPlanner.new({
@@ -312,6 +320,8 @@ mp = MasterPlanner.new({
 	:credentials => JSON.parse(IO.read('credentials.json'))
 })
 
-# mp.login
-sample_node = Nokogiri::HTML IO.read('sample-node.html')
-puts mp.process_events_list
+mp.login
+events = mp.process_events_list
+events.each do |event|
+	mp.push_event event
+end
