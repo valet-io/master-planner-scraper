@@ -133,6 +133,18 @@ class MasterPlanner
 
 	end
 
+	def parse_mp_block_text(text)
+		parsed = text.gsub("\r\n",'').squeeze(" ").split(/\u00A0{2}/).map! { |field|
+			field.strip.gsub(/\.$/,'')
+		}
+
+		parsed.reject! { |line|
+			line.empty? # Remove empty lines
+		}
+		parsed
+	end
+
+
 	def parse_event_node(node)
 		event = {}
 
@@ -145,14 +157,14 @@ class MasterPlanner
 		# Type: String
 		# Strategy: Selector
 
-		event[:organization] = node.at('.evtList_Evt_Head h3').text
+		event[:organization] = node.at('.evtList_Evt_Head h3').text.strip
 
 		# (2) Event Name
 		# Required: True
 		# Type: String
 		# Strategy: Selector
 
-		event[:name] = node.at('.evtList_Evt_Info .EvtTitle').text
+		event[:name] = node.at('.evtList_Evt_Info .EvtTitle').text.strip
 		
 		# (3) MasterPlanner Description
 		# Description: The full description block to assist with debugging and error correction
@@ -171,61 +183,84 @@ class MasterPlanner
 		# 	- Split into array using regex for two consecutive non-breaking spaces using its unicode char
 		# 	- Remap array to strip leading and trailing whitespace for each extracted property as well as trailing
 
-		mp_description_array = node.at('.evtList_Evt_Info').children[2].text.gsub("\n",'').squeeze(" ").split(/\u00A0{2}/)
-		mp_description_array.map! { |line|
-			line = line.strip[0...-1]
-		}
-		
-		matches, unmatched = match_fields mp_description_array, {
+		mp_description_array = parse_mp_block_text node.at('.evtList_Evt_Info').children[2].text
+		mp_extra_array = parse_mp_block_text node.at('.evtList_ExtInfo').text
+
+		event_fields_array = mp_description_array | mp_extra_array	
+
+		matches, unmatched = match_fields event_fields_array, {
 			:start_time => {
 				:regex => /\A\d?[0-2]?:[0-5][0-9] (am|pm)\z/,
 				:unprefixed => true
 			},
 			:attire => {
-				:regex => / attire\z/,
-				:unprefixed => true
+				:regex => / attire$/
+			},
+			:invitation_only => {
+				:regex => /^Invitation only$/,
+				:boolean => true
 			},
 			:speakers => {
-				:regex => /\ASpeaker\(s\): /,
+				:regex => /^Speaker\(s\): /,
 				:array => true
 			},
 			:honorees => {
-				:regex => /\AHonoring /,
+				:regex => /^Honoring /,
 				:array => true
 			},
 			:chairs => {
-				:regex => /\AChaired by /,
+				:regex => /^Chaired by /,
 				:array => true
 			},
 			:co_chairs => {
-				:regex => /\ACo-chaired by /,
+				:regex => /^Co-chaired by /,
 				:array => true
 			},
 			:hosts => {
-				:regex => /\AHosted by /,
+				:regex => /^Hosted by /,
 				:array => true
 			},
 			:ticket_price => {
-				:regex => /\ATickets from /,
-				:array => true
+				:regex => /^Tickets from \$/,
+				:number => true
 			},
 			:table_price => {
-				:regex => /\ATables from /,
-				:array => true
+				:regex => /^Tables from \$/,
+				:number => true
 			},
 			:contact_name => {
-				:regex => /\AContact: /
+				:regex => /^Contact: /
 			},
+			:contact_phone => {
+				# Match numbers in format (999){whitespace or nbsp}999-9999
+				:regex => /^\(\d{3}\)(\s|\u00a0)\d{3}-\d{4}$/,
+				:unprefixed => true
+			}, 
+			:website => {
+				:regex => /^Event web address: /
+			},
+			:address => {
+				:regex => /^Event address: /
+			}
 		}
 
 		event.merge! matches
-		city = unmatched.grep(/\A(New York|Brooklyn|Bronx)\z/).first
+		city = unmatched.grep(/^(New York|New York City|Brooklyn|Bronx)$/).first
 		if city
 			venue = unmatched[unmatched.index(city) - 1]
+			unmatched.delete city
+			unmatched.delete venue
 			event[:city] = city
 			event[:venue] = venue
 		end
-		event
+		if unmatched.any?
+			puts "Matched:"
+			puts event.inspect
+			puts "Unmatched:"
+			puts unmatched.inspect
+		end
+		
+		return event
 	end
 
 	def match_fields(source_array, matcher_hash)
@@ -244,6 +279,10 @@ class MasterPlanner
 				match.gsub!(params[:regex], '') unless params[:unprefixed]
 				if params[:array]
 					matches[property] = match.split ', '
+				elsif params[:boolean]
+					matches[property] = true
+				elsif params[:number]
+					matches[property] = match.gsub(',','').to_i
 				else
 					matches[property] = match
 				end
@@ -261,4 +300,4 @@ mp = MasterPlanner.new({
 
 # mp.login
 sample_node = Nokogiri::HTML IO.read('sample-node.html')
-puts mp.process_events_list
+mp.process_events_list
