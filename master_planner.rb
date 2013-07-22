@@ -103,7 +103,7 @@ class MasterPlanner
 				end
 			{
 				:date => Date.parse(node.at('h2').text),
-				:range => (begin_range..end_range)
+				:range => (begin_range...end_range)
 			}
 		}
 
@@ -119,6 +119,139 @@ class MasterPlanner
 
 		return events
 	end
+
+	def process_events_list
+		processed_events = []
+		events = preprocess_events_list
+		events.each do |event|
+			processed_event = parse_event_node event[:node]
+			processed_event[:date] = event[:date]
+			processed_events.push processed_event
+		end
+
+		processed_events
+
+	end
+
+	def parse_event_node(node)
+		event = {}
+
+		######## HEADER FIELDS ########
+
+		# Preparation Steps: None Required
+
+		# (1) Organization Name
+		# Required: True
+		# Type: String
+		# Strategy: Selector
+
+		event[:organization] = node.at('.evtList_Evt_Head h3').text
+
+		# (2) Event Name
+		# Required: True
+		# Type: String
+		# Strategy: Selector
+
+		event[:name] = node.at('.evtList_Evt_Info .EvtTitle').text
+		
+		# (3) MasterPlanner Description
+		# Description: The full description block to assist with debugging and error correction
+		# Required: True
+		# Type: String
+		# Strategy: Selector
+
+		# event[:mp_description] = node.at('.evtList_Evt_Info').text
+
+		######## DESCRIPTION BLOCK ########
+
+		# Preparation Steps:
+		# 	- Get text node (3rd child)
+		# 	- Delete newlines
+		# 	- Remove multiple spacing
+		# 	- Split into array using regex for two consecutive non-breaking spaces using its unicode char
+		# 	- Remap array to strip leading and trailing whitespace for each extracted property as well as trailing
+
+		mp_description_array = node.at('.evtList_Evt_Info').children[2].text.gsub("\n",'').squeeze(" ").split(/\u00A0{2}/)
+		mp_description_array.map! { |line|
+			line = line.strip[0...-1]
+		}
+		
+		matches, unmatched = match_fields mp_description_array, {
+			:start_time => {
+				:regex => /\A\d?[0-2]?:[0-5][0-9] (am|pm)\z/,
+				:unprefixed => true
+			},
+			:attire => {
+				:regex => / attire\z/,
+				:unprefixed => true
+			},
+			:speakers => {
+				:regex => /\ASpeaker\(s\): /,
+				:array => true
+			},
+			:honorees => {
+				:regex => /\AHonoring /,
+				:array => true
+			},
+			:chairs => {
+				:regex => /\AChaired by /,
+				:array => true
+			},
+			:co_chairs => {
+				:regex => /\ACo-chaired by /,
+				:array => true
+			},
+			:hosts => {
+				:regex => /\AHosted by /,
+				:array => true
+			},
+			:ticket_price => {
+				:regex => /\ATickets from /,
+				:array => true
+			},
+			:table_price => {
+				:regex => /\ATables from /,
+				:array => true
+			},
+			:contact_name => {
+				:regex => /\AContact: /
+			},
+		}
+
+		event.merge! matches
+		city = unmatched.grep(/\A(New York|Brooklyn|Bronx)\z/).first
+		if city
+			venue = unmatched[unmatched.index(city) - 1]
+			event[:city] = city
+			event[:venue] = venue
+		end
+		event
+	end
+
+	def match_fields(source_array, matcher_hash)
+		matches = {}
+		unmatched = source_array
+		matcher_hash.each do |property, params|
+			match = source_array.grep params[:regex]
+			if match.length >= 2
+				puts "Matched #{match.length} times for #{property}"
+				puts match
+			elsif match.empty?
+				# puts "No match for #{property}"
+			else
+				match = match.first
+				unmatched.delete match
+				match.gsub!(params[:regex], '') unless params[:unprefixed]
+				if params[:array]
+					matches[property] = match.split ', '
+				else
+					matches[property] = match
+				end
+			end
+		end
+		return matches, unmatched
+	end
+
 end
 
 mp = MasterPlanner.new({
@@ -127,4 +260,5 @@ mp = MasterPlanner.new({
 })
 
 # mp.login
-mp.preprocess_events_list
+sample_node = Nokogiri::HTML IO.read('sample-node.html')
+puts mp.process_events_list
